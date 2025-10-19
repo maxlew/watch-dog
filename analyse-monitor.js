@@ -1,27 +1,28 @@
 #!/usr/bin/env node
-require('dotenv').config({ quiet: true });
+process.loadEnvFile();
+
 const { styleText } = require('node:util');
 const { 
   calculateRollingAggregation, 
-  parseMonitorQuery 
 } = require('./rollup-calculator');
 const { 
   getMonitorConfig,
   fetchRawMetricData,
   extractMetricQuery
 } = require('./datadog-fetcher');
+const { createComprehensiveCharts } = require('./cli-charts');
 
     
 // localStringConfig – don't show decimal places
 const lsc = ['en-AU', { maximumFractionDigits: 0, minimumFractionDigits: 0 }];
 
-async function analyseMonitor(monitorId, debugMode = false, days = 3) {
+async function analyseMonitor(monitorId, debugMode = false, days = 3, showCharts = true) {
   try {
-    console.log(`🐶 ${styleText('cyan', 'Monitor Analysis:')} ${styleText('bold', String(monitorId))}`);
     if (debugMode) console.log(`📅 ${styleText('dim', 'Fetching recent data for comprehensive analysis')}\n`);
     
     // Get monitor configuration using the new data fetcher
     const monitor = await getMonitorConfig(monitorId);
+    console.log(`🐶 ${styleText('cyan', 'Monitor Analysis:')} ${styleText('bold', String(monitorId))}`);
     
     console.log(`   ${styleText('blue', 'Name:')} ${styleText('white', monitor.name)}`);
     console.log(`   ${styleText('blue', 'ID:')} ${styleText('white', String(monitor.id))}`);
@@ -160,6 +161,25 @@ async function analyseMonitor(monitorId, debugMode = false, days = 3) {
     recommendations.insights.forEach(insight => {
       console.log(`   ${styleText('green', '•')} ${styleText('white', insight)}`);
     });
+
+    // Visual charts (time series + histogram)
+    if (showCharts) {
+      try {
+        createComprehensiveCharts(
+          combinedData.timeSeriesData,
+          {
+            critical: thresholds.critical,
+            warning: thresholds.warning
+          },
+          {
+            title: 'Metric Visuals',
+            histogramOptions: { width: 60, bins: 20, showThresholds: true }
+          }
+        );
+      } catch (chartErr) {
+        console.log(`${styleText('yellow', '⚠️  Chart rendering skipped:')} ${styleText('white', chartErr.message)}`);
+      }
+    }
     
   } catch (error) {
     console.error(`❌ ${styleText('red', 'Error analysing monitor:')} ${styleText('white', error.message)}`);
@@ -729,6 +749,7 @@ function convertTimeToSeconds(timeStr) {
 // CLI handling
 const monitorId = process.argv[2];
 const isDebugMode = process.argv.includes('--debug') || process.env.DEBUG === 'true';
+const showCharts = process.argv.includes('--charts');
 
 // Parse days parameter
 let days = 3; // Default
@@ -760,11 +781,13 @@ if (!monitorId) {
   console.log(styleText('magenta', 'Options:'));
   console.log(`  ${styleText('yellow', '--debug')}      ${styleText('white', 'Enable detailed debug output')}`);
   console.log(`  ${styleText('yellow', '--days=N')}     ${styleText('white', 'Number of days to fetch (default: 3, recommended: 2-7)')}`);
+  console.log(`  ${styleText('yellow', '--charts')}    ${styleText('white', 'Enable visual distribution histogram')}`);
   console.log();
   console.log(styleText('green', 'Examples:'));
   console.log(`  ${styleText('dim', 'node analyse-monitor.js')} ${styleText('yellow', '9564272')}              ${styleText('dim', '# Analyze with 3 days of data')}`);
   console.log(`  ${styleText('dim', 'node analyse-monitor.js')} ${styleText('yellow', '177932009')} ${styleText('blue', '--days=2')}   ${styleText('dim', '# Analyze with 2 days of data')}`);
-  console.log(`  ${styleText('dim', 'node analyse-monitor.js')} ${styleText('yellow', '136674045')} ${styleText('blue', '--debug')}      ${styleText('dim', '# Analyze with debug output')}`);
+  console.log(`  ${styleText('dim', 'node analyse-monitor.js')} ${styleText('yellow', '9564272')} ${styleText('blue', '--charts')}    ${styleText('dim', '# Analyze with distribution chart')}`);
+  console.log(`  ${styleText('dim', 'node analyse-monitor.js')} ${styleText('yellow', '9564272')} ${styleText('blue', '--debug')}      ${styleText('dim', '# Analyze with debug output')}`);
   console.log();
   process.exit(0);
 }
@@ -780,14 +803,19 @@ if (!monitorId) {
       '                                                                                ░███████'
     ];
     
-    const colors = ['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'];
+    const colors = ['blue', 'cyan', 'blue', 'cyan', 'blue', 'cyan'];
     console.log();
     asciiLines.forEach((line, i) => {
       const color = colors[i % colors.length];
-      console.log(styleText(color, line));
+      setTimeout(() => {
+        console.log(styleText(color, line));
+      }, i * 100);
     });
 
 // Run the analysis
-analyseMonitor(monitorId, isDebugMode, days);
+setTimeout(() => {
+  console.log();
+  analyseMonitor(monitorId, isDebugMode, days, showCharts);
+}, asciiLines.length * 100 + 100);
 
 module.exports = { analyseMonitor };

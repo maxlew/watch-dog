@@ -5,7 +5,11 @@
  * rollup selection based on time range and data density requirements.
  */
 
-require('dotenv').config({ quiet: true });
+try {
+  process.loadEnvFile();
+} catch {
+  // .env file not found or error loading, continue without it
+}
 const { client, v1 } = require('@datadog/datadog-api-client');
 const { parseMonitorQuery } = require('./rollup-calculator');
 
